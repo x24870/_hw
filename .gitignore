@@ -1,2 +1,5 @@
+.vscode/
 main
+*.o
 downloaded_file
+restored_file
