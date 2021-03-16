@@ -4,39 +4,56 @@
 
 #include "reassemble.h"
 
-int parse_file_to_dict(char*, Chunk**);
+int parse_file_to_dict(const char*, Chunk**);
 int parse_packet(FILE*, Chunk**);
+int fetch_file(const char*, const char*);
 
 int main() {
+    char url[] = "test.jigentec.com:49152";
+    char filename[] = "downloaded_file";
+    int ret;
+
+    ret = fetch_file(url, filename);
+    if (ret < 0) {
+        exit(1);
+    }
+
+    //parse file
+    Chunk* dict_chunks = NULL;
+    parse_file_to_dict(filename, &dict_chunks);
+}
+
+int fetch_file(const char* url, const char* filename) {
     CURL* curl;
     FILE* fp;
     int result;
 
-    fp = fopen("downloaded_file", "wb");
+    fp = fopen(filename, "w");
+    if (fp == NULL) {
+        printf("ERROR: Unable to open the file: %s\n", filename);
+        return -1;
+    }
     curl = curl_easy_init();
 
-    curl_easy_setopt(curl, CURLOPT_URL, "test.jigentec.com:49152");
+    curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
     curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
 
     result = curl_easy_perform(curl);
-
-    if (result == CURLE_OK) {
-        printf("Download successful\n");
-    } else {
-        printf("ERROR: %s\n", curl_easy_strerror(result));
-    }
-
     fclose(fp);
     curl_easy_cleanup(curl);
 
-    //parse file
-    Chunk* dict_chunks = NULL;
-    parse_file_to_dict("downloaded_file", &dict_chunks);
+    if (result != CURLE_OK) {
+        printf("ERROR: %s\n", curl_easy_strerror(result));
+        return -1;
+    }
+    
+    printf("Download successfully\n");
+    return 0;
 }
 
 // process file
-int parse_file_to_dict(char* filename, Chunk** dict_chunk) {
+int parse_file_to_dict(const char* filename, Chunk** dict_chunk) {
     FILE* fp = fopen(filename, "r");
     if (fp == NULL) return -1;
 
@@ -75,20 +92,14 @@ int parse_packet(FILE* fp, Chunk** dict_chunk) {
             return -1;
         seq = seq << 8;
         seq += tmp;
-        printf("tmp: %.2x\n", tmp);
     }
-    printf("chunk seq: %.2x\n", seq);
-    printf("chunk seq: %d\n", seq);
 
     for (int i = 0; i < 2; i++) {
         if ((fread(&tmp, 1, 1, fp)) != 1)
             return -1;
         len = len << 8;
         len += tmp;
-        printf("tmp: %.2x\n", tmp);
     }
-    printf("chunk len: %.2x\n", len);
-    printf("chunk len: %d\n", len);
 
     char* data = malloc(len);
     for (int i = 0; i < len; i++) {
