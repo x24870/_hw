@@ -4,23 +4,28 @@
 
 #include "reassemble.h"
 
-int parse_file_to_dict(const char*, Chunk**);
+int parse_file(const char*, Chunk**);
 int parse_packet(FILE*, Chunk**);
 int fetch_file(const char*, const char*);
+int reassemble(Chunk**);
 
 int main() {
     char url[] = "test.jigentec.com:49152";
     char filename[] = "downloaded_file";
-    int ret;
 
-    ret = fetch_file(url, filename);
-    if (ret < 0) {
-        exit(1);
+    if (fetch_file(url, filename) < 0) exit(1);
+
+    // define a dictionary to contain data chunk
+    // key is sequence of the chunk
+    // value is the data in the chunk
+    Chunk* dict_chunk = NULL;
+    if (parse_file(filename, &dict_chunk) == 0) {
+        reassemble(&dict_chunk);
+    } else {
+        printf("Parsing packet failed, skip reassemble process\n");
     }
 
-    //parse file
-    Chunk* dict_chunks = NULL;
-    parse_file_to_dict(filename, &dict_chunks);
+    delete_all_chunk(&dict_chunk);
 }
 
 int fetch_file(const char* url, const char* filename) {
@@ -30,7 +35,7 @@ int fetch_file(const char* url, const char* filename) {
 
     fp = fopen(filename, "w");
     if (fp == NULL) {
-        printf("ERROR: Unable to open the file: %s\n", filename);
+        printf("ERROR: Unable to open the file\n\t%s\n", filename);
         return -1;
     }
     curl = curl_easy_init();
@@ -44,28 +49,69 @@ int fetch_file(const char* url, const char* filename) {
     curl_easy_cleanup(curl);
 
     if (result != CURLE_OK) {
-        printf("ERROR: %s\n", curl_easy_strerror(result));
+        printf("ERROR: unable to download file\n\t%s\n", curl_easy_strerror(result));
         return -1;
     }
-    
+
     printf("Download successfully\n");
     return 0;
 }
 
-// process file
-int parse_file_to_dict(const char* filename, Chunk** dict_chunk) {
+int parse_file(const char* filename, Chunk** dict_chunk) {
     FILE* fp = fopen(filename, "r");
-    if (fp == NULL) return -1;
+    if (fp == NULL) {
+        printf("ERROR: Unable to open the file\n\t%s\n", filename);
+        return -1;
+    }
 
     while (!feof(fp)) {
         parse_packet(fp, dict_chunk);
     }
 
     fclose(fp);
+    printf("Parsed the file successfully\n");
+    return 0;
+}
 
-    //reassemble
-    fp = fopen("restored_file", "w");
-    if (fp == NULL) return -1;
+int parse_packet(FILE* fp, Chunk** dict_chunk) {
+    int seq = 0, len = 0, tmp = 0;
+
+    // get sequence
+    for (int i = 0; i < 4; i++) {
+        if ((fread(&tmp, 1, 1, fp)) != 1)
+            return -1;
+        seq = seq << 8;
+        seq += tmp;
+    }
+
+    // get length
+    for (int i = 0; i < 2; i++) {
+        if ((fread(&tmp, 1, 1, fp)) != 1)
+            return -1;
+        len = len << 8;
+        len += tmp;
+    }
+
+    // get data
+    char* data = malloc(len);
+    for (int i = 0; i < len; i++) {
+        if ((fread(&tmp, 1, 1, fp)) != 1)
+            return -1;
+        data[i] = tmp;
+    }
+
+    add_chunk(dict_chunk, seq, len, data);
+
+    return 0;
+}
+
+int reassemble(Chunk** dict_chunk) {
+    const char filename[] = "restored_file";
+    FILE* fp = fopen(filename, "w");
+    if (fp == NULL) {
+        printf("ERROR: Unable to open the file\n\t%s\n", filename);
+        return -1;
+    }
 
     int seq = 0;
     Chunk* item = NULL;
@@ -78,37 +124,7 @@ int parse_file_to_dict(const char* filename, Chunk** dict_chunk) {
         seq++;
     }
 
-    delete_all_chunk(dict_chunk);
     fclose(fp);
-
-    return 0;
-}
-
-int parse_packet(FILE* fp, Chunk** dict_chunk) {
-    int seq = 0, len = 0, tmp = 0;
-
-    for (int i = 0; i < 4; i++) {
-        if ((fread(&tmp, 1, 1, fp)) != 1)
-            return -1;
-        seq = seq << 8;
-        seq += tmp;
-    }
-
-    for (int i = 0; i < 2; i++) {
-        if ((fread(&tmp, 1, 1, fp)) != 1)
-            return -1;
-        len = len << 8;
-        len += tmp;
-    }
-
-    char* data = malloc(len);
-    for (int i = 0; i < len; i++) {
-        if ((fread(&tmp, 1, 1, fp)) != 1)
-            return -1;
-        data[i] = tmp;
-    }
-
-    add_chunk(dict_chunk, seq, len, data);
-
+    printf("Reassemble successfully\n\toutput file: %s\n", filename);
     return 0;
 }
