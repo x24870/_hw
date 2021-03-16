@@ -6,6 +6,7 @@ Compiler: gcc
 
 ## Installation
 
+Clone this repo and enter the directory
 ```bash
 git submodule init
 git submodule update --recursive
