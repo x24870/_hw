@@ -28,7 +28,21 @@ Run
 
 If the process is successful, that output file will be named 'restored_file'
 
+# Validation
+
 Check the sha256 checksum
 ```bash
 sha256sum restored_file
+```
+
+Check memory leak
+
+Install valgrind
+```bash
+sudo apt install valgrind
+```
+
+Check if there is any memory leak
+```bash
+valgrind  --leak-check=full ./main
 ```
