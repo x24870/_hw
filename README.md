@@ -21,9 +21,11 @@ make
 
 ## Usage
 
+Run
 ```bash
 ./main
 ```
+
 If the process is successful, that output file will be named 'restored_file'
 
 Check the sha256 checksum
